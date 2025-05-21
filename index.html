@@ -2,121 +2,197 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Dodge the Blocks</title>
+  <title>Dodge the Missiles</title>
   <style>
     body {
       margin: 0;
-      background: #222;
+      background: #111;
       color: white;
       font-family: Arial, sans-serif;
       text-align: center;
     }
     canvas {
-      background: #111;
+      background: #000;
       display: block;
       margin: 20px auto;
       border: 2px solid #fff;
     }
-    h1 {
+    #restartBtn {
+      display: none;
+      padding: 10px 20px;
+      font-size: 16px;
       margin-top: 20px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #restartBtn:hover {
+      background-color: #218838;
+    }
+    #info {
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>Dodge the Blocks</h1>
+  <h1>Dodge the Missiles</h1>
+  <p><strong>Use Arrow Keys</strong> to Move</p>
   <canvas id="gameCanvas" width="400" height="600"></canvas>
+  <div id="info">
+    <p id="timerDisplay">Time Elapsed: 0s</p>
+    <p id="healthDisplay">Health: ❤️❤️❤️</p>
+  </div>
+  <button id="restartBtn">Restart Game</button>
+
+  <audio id="hitSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_bf88a0146c.mp3"></audio>
+  <audio id="gameOverSound" src="https://cdn.pixabay.com/audio/2022/03/11/audio_78529ad8b6.mp3"></audio>
+
   <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    const restartBtn = document.getElementById('restartBtn');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const healthDisplay = document.getElementById('healthDisplay');
 
-    // Player properties
-    const player = {
+    const hitSound = document.getElementById('hitSound');
+    const gameOverSound = document.getElementById('gameOverSound');
+
+    let gameOver = false;
+    let startTime;
+    let timeElapsed = 0;
+    let health = 3;
+    let animationFrame;
+    let intervalId;
+
+    const ship = {
       x: 180,
       y: 550,
       width: 40,
       height: 40,
-      color: 'lime',
+      color: 'cyan',
       speed: 5
     };
 
-    // Blocks (obstacles)
-    let blocks = [];
-    let score = 0;
-    let gameOver = false;
-
-    // Handle keyboard input
+    let missiles = [];
     let keys = {};
+
     document.addEventListener('keydown', e => keys[e.key] = true);
     document.addEventListener('keyup', e => keys[e.key] = false);
 
-    function createBlock() {
-      const size = 40;
+    function drawShip() {
+      ctx.fillStyle = ship.color;
+      ctx.beginPath();
+      ctx.moveTo(ship.x + 20, ship.y); // Nose
+      ctx.lineTo(ship.x, ship.y + 40); // Left wing
+      ctx.lineTo(ship.x + 40, ship.y + 40); // Right wing
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function createMissile() {
+      const size = 20;
       const x = Math.floor(Math.random() * (canvas.width - size));
-      blocks.push({ x, y: -size, width: size, height: size, speed: 3 });
+      missiles.push({ x, y: -size, width: size, height: size, speed: 3 });
     }
 
     function update() {
       if (gameOver) return;
 
-      // Move player
-      if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
-      if (keys['ArrowRight'] && player.x < canvas.width - player.width) player.x += player.speed;
+      // Movement
+      if (keys['ArrowLeft'] && ship.x > 0) ship.x -= ship.speed;
+      if (keys['ArrowRight'] && ship.x < canvas.width - ship.width) ship.x += ship.speed;
 
-      // Update blocks
-      for (let block of blocks) {
-        block.y += block.speed;
+      // Missile updates
+      for (let i = missiles.length - 1; i >= 0; i--) {
+        const missile = missiles[i];
+        missile.y += missile.speed;
 
-        // Collision detection
+        // Collision
         if (
-          block.x < player.x + player.width &&
-          block.x + block.width > player.x &&
-          block.y < player.y + player.height &&
-          block.y + block.height > player.y
+          missile.x < ship.x + ship.width &&
+          missile.x + missile.width > ship.x &&
+          missile.y < ship.y + ship.height &&
+          missile.y + missile.height > ship.y
         ) {
-          gameOver = true;
+          missiles.splice(i, 1); // Remove missile
+          health--;
+          hitSound.play();
+          updateHealthDisplay();
+          if (health <= 0) {
+            gameOver = true;
+            endGame();
+            return;
+          }
         }
       }
 
-      // Remove off-screen blocks and update score
-      blocks = blocks.filter(block => block.y < canvas.height);
-      score++;
+      missiles = missiles.filter(m => m.y < canvas.height);
+      timeElapsed = Math.floor((Date.now() - startTime) / 1000);
     }
 
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawShip();
 
-      // Draw player
-      ctx.fillStyle = player.color;
-      ctx.fillRect(player.x, player.y, player.width, player.height);
-
-      // Draw blocks
-      for (let block of blocks) {
+      for (let missile of missiles) {
         ctx.fillStyle = 'red';
-        ctx.fillRect(block.x, block.y, block.width, block.height);
+        ctx.fillRect(missile.x, missile.y, missile.width, missile.height);
       }
 
-      // Draw score
       ctx.fillStyle = 'white';
       ctx.font = '20px Arial';
-      ctx.fillText("Score: " + score, 10, 30);
-
-      // Game over
-      if (gameOver) {
-        ctx.fillStyle = 'white';
-        ctx.font = '40px Arial';
-        ctx.fillText("Game Over", 100, canvas.height / 2);
-      }
+      ctx.fillText("Time Elapsed: " + timeElapsed + "s", 10, 30);
     }
 
     function gameLoop() {
       update();
       draw();
-      if (!gameOver) requestAnimationFrame(gameLoop);
+      if (!gameOver) {
+        animationFrame = requestAnimationFrame(gameLoop);
+      }
     }
 
-    // Start game
-    setInterval(createBlock, 1000); // Add new block every second
-    gameLoop();
+    function startGame() {
+      missiles = [];
+      ship.x = 180;
+      ship.y = 550;
+      gameOver = false;
+      health = 3;
+      timeElapsed = 0;
+      startTime = Date.now();
+      timerDisplay.textContent = "Time Elapsed: 0s";
+      updateHealthDisplay();
+      restartBtn.style.display = "none";
+
+      animationFrame = requestAnimationFrame(gameLoop);
+      intervalId = setInterval(() => {
+        createMissile();
+        timerDisplay.textContent = `Time Elapsed: ${timeElapsed}s`;
+      }, 1000);
+    }
+
+    function endGame() {
+      cancelAnimationFrame(animationFrame);
+      clearInterval(intervalId);
+      gameOverSound.play();
+      ctx.fillStyle = 'white';
+      ctx.font = '40px Arial';
+      ctx.fillText("Game Over", 100, canvas.height / 2);
+      restartBtn.style.display = "inline-block";
+    }
+
+    function updateHealthDisplay() {
+      const hearts = "❤️".repeat(health) + "🖤".repeat(3 - health);
+      healthDisplay.textContent = `Health: ${hearts}`;
+    }
+
+    restartBtn.onclick = () => {
+      startGame();
+    };
+
+    // Initial game start
+    startGame();
   </script>
 </body>
 </html>
